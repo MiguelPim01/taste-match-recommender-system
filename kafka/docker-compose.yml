@@ -1,0 +1,177 @@
+x-kafka-environment: &kafka-environment
+  KAFKA_PROCESS_ROLES: broker,controller
+  KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+  KAFKA_LISTENERS: CONTROLLER://:9093,PLAINTEXT://:19092,PLAINTEXT_HOST://:9092
+  KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+  KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+  KAFKA_LOG_DIRS: /var/lib/kafka/data
+  KAFKA_NUM_PARTITIONS: 3
+  KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+  KAFKA_MIN_INSYNC_REPLICAS: 2
+  KAFKA_OFFSETS_TOPIC_NUM_PARTITIONS: 3
+  KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+  KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+  KAFKA_SHARE_COORDINATOR_STATE_TOPIC_NUM_PARTITIONS: 3
+  KAFKA_SHARE_COORDINATOR_STATE_TOPIC_REPLICATION_FACTOR: 3
+  KAFKA_SHARE_COORDINATOR_STATE_TOPIC_MIN_ISR: 2
+  KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+  CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+
+x-kafka-service: &kafka-service
+  image: apache/kafka:4.3.1
+  restart: unless-stopped
+  networks:
+    - kafka-network
+  healthcheck:
+    test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 >/dev/null 2>&1"]
+    interval: 10s
+    timeout: 8s
+    retries: 12
+    start_period: 20s
+
+x-java-service: &java-service
+  image: taste-match-kafka-apps:local
+  restart: unless-stopped
+  networks:
+    - kafka-network
+  depends_on:
+    app-build:
+      condition: service_completed_successfully
+    topic-init:
+      condition: service_completed_successfully
+
+x-producer-environment: &producer-environment
+  KAFKA_BOOTSTRAP_SERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
+  PRODUCER_INTERVAL_MS: ${PRODUCER_INTERVAL_MS:-1000}
+  DEMO_USER_COUNT: ${DEMO_USER_COUNT:-5}
+  DEMO_RESTAURANT_COUNT: ${DEMO_RESTAURANT_COUNT:-8}
+
+services:
+  app-build:
+    image: taste-match-kafka-apps:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["java", "-version"]
+    restart: "no"
+    networks:
+      - kafka-network
+
+  kafka-1:
+    <<: *kafka-service
+    ports:
+      - "29092:9092"
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 1
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:19092,PLAINTEXT_HOST://localhost:29092
+    volumes:
+      - kafka-1-data:/var/lib/kafka/data
+
+  kafka-2:
+    <<: *kafka-service
+    ports:
+      - "39092:9092"
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 2
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:19092,PLAINTEXT_HOST://localhost:39092
+    volumes:
+      - kafka-2-data:/var/lib/kafka/data
+
+  kafka-3:
+    <<: *kafka-service
+    ports:
+      - "49092:9092"
+    environment:
+      <<: *kafka-environment
+      KAFKA_NODE_ID: 3
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:19092,PLAINTEXT_HOST://localhost:49092
+    volumes:
+      - kafka-3-data:/var/lib/kafka/data
+
+  topic-init:
+    image: apache/kafka:4.3.1
+    restart: "no"
+    networks:
+      - kafka-network
+    depends_on:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
+        condition: service_healthy
+    command:
+      - /bin/bash
+      - -ec
+      - |
+        for topic in view-restaurant comment-restaurant review-restaurant; do
+          /opt/kafka/bin/kafka-topics.sh \
+            --bootstrap-server kafka-1:19092,kafka-2:19092,kafka-3:19092 \
+            --create --if-not-exists \
+            --topic "$${topic}" \
+            --partitions 3 \
+            --replication-factor 3 \
+            --config min.insync.replicas=2
+        done
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka-1:19092,kafka-2:19092,kafka-3:19092 \
+          --describe
+
+  view-producer:
+    <<: *java-service
+    command: ["java", "-jar", "/app/view-producer.jar"]
+    environment:
+      <<: *producer-environment
+
+  comment-producer:
+    <<: *java-service
+    command: ["java", "-jar", "/app/comment-producer.jar"]
+    environment:
+      <<: *producer-environment
+
+  review-producer:
+    <<: *java-service
+    command: ["java", "-jar", "/app/review-producer.jar"]
+    environment:
+      <<: *producer-environment
+
+  view-matrix-consumer:
+    <<: *java-service
+    command: ["java", "-jar", "/app/view-matrix-consumer.jar"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
+      DATABASE_PATH: /data/views.db
+    volumes:
+      - ./data:/data
+
+  comment-matrix-consumer:
+    <<: *java-service
+    command: ["java", "-jar", "/app/comment-matrix-consumer.jar"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
+      DATABASE_PATH: /data/comments.db
+    volumes:
+      - ./data:/data
+
+  review-matrix-consumer:
+    <<: *java-service
+    command: ["java", "-jar", "/app/review-matrix-consumer.jar"]
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
+      DATABASE_PATH: /data/reviews.db
+    volumes:
+      - ./data:/data
+
+networks:
+  kafka-network:
+    driver: bridge
+
+volumes:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data:

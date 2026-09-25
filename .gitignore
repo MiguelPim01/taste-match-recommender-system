@@ -1,0 +1,4 @@
+kafka/data/*.db
+kafka/data/*.db-shm
+kafka/data/*.db-wal
+kafka/**/target/
