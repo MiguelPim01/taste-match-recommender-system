@@ -8,12 +8,12 @@ Pré-requisito: Docker com o plugin Docker Compose.
 
 ```bash
 cd kafka
-docker compose up --build -d
+docker compose --profile synthetic up --build -d
 docker compose ps
 docker compose logs -f view-producer view-matrix-consumer
 ```
 
-Depois de alguns segundos, os arquivos `data/views.db`, `data/comments.db` e `data/reviews.db` serão criados. Para encerrar preservando os dados:
+O perfil `synthetic` liga os três produtores. Depois de alguns segundos, os arquivos `data/views.db`, `data/comments.db` e `data/reviews.db` serão criados. Para encerrar preservando os dados:
 
 ```bash
 docker compose down
@@ -39,4 +39,4 @@ Cada tópico possui três partições, fator de replicação 3 e `min.insync.rep
 4. [Produtores e consumidores](docs/04_produtores_e_consumidores.md)
 5. [Matrizes SQLite](docs/05_matrizes_sqlite.md)
 6. [Validação](docs/06_validacao.md)
-7. [Integração futura](docs/07_integracao_futura.md)
+7. [Integração com treinamento](docs/07_integracao_futura.md)

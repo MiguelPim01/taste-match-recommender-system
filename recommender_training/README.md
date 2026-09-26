@@ -1,55 +1,48 @@
 # Treinamento do recomendador
 
-Este diretório contém o planejamento do componente que recebe interações de usuários via Kafka, treina três recomendadores NeuMF com RecBole, acompanha experimentos no MLflow e anuncia quando um ensemble melhor está pronto. O projeto usa avaliações e comentários em inglês do Yelp Open Dataset; por isso, a análise de sentimento prevista é feita com VADER.
+Este componente lê os três bancos SQLite dos consumidores Kafka, treina três NeuMF com RecBole e combina os rankings. O Yelp fornece a carga inicial; eventos posteriores provocam retreino. O MLflow guarda métricas e pacotes de modelos.
 
-**Estado atual:** esta etapa entrega apenas a documentação em [`planning/`](planning/01_requisitos_e_fluxo.md). Ainda não existem código, dependências ou comandos executáveis de treinamento neste diretório. Os comandos abaixo são a interface **prevista para a implementação**, não instruções que já funcionam no repositório.
+## Início rápido
 
-## Fluxo e organização
-
-1. O preparador lê `business.json` e `review.json` do Yelp, seleciona restaurantes e separa registros em dados iniciais, eventos a reproduzir e validação fixa.
-2. Avaliações, comentários e visualizações simuladas são publicados em `restaurant.interactions.v1`. Um consumidor grava eventos únicos em SQLite e mantém os dados necessários às três matrizes usuário × restaurante.
-3. Um comando faz o primeiro treino. Depois, o consumidor dispara novo treino a cada 100 eventos únicos desde o último treino bem-sucedido; esse número é configurável.
-4. O treinamento cria três modelos NeuMF, avalia a combinação em uma validação fixa e registra métricas e artefatos no MLflow. Se o resultado melhorar o atual, atualiza o ponteiro local e publica `recommender.model.ready.v1`.
-
-| Documento | Conteúdo |
-| --- | --- |
-| [`01_requisitos_e_fluxo.md`](planning/01_requisitos_e_fluxo.md) | Requisitos do trabalho, fronteiras e sequência de eventos |
-| [`02_eventos_e_dados.md`](planning/02_eventos_e_dados.md) | Contratos Kafka, Yelp, simulação, persistência e matrizes |
-| [`03_preparacao_e_modelos.md`](planning/03_preparacao_e_modelos.md) | VADER, RecBole, ensemble, avaliação e casos sem histórico |
-| [`04_retreino_e_publicacao.md`](planning/04_retreino_e_publicacao.md) | Gatilho, MLflow, promoção e evento de modelo pronto |
-| [`05_implementacao_e_validacao.md`](planning/05_implementacao_e_validacao.md) | Organização futura do código e critérios de aceite |
-
-## Como executar após a implementação
-
-Pré-requisitos previstos: Python 3.10, um broker Kafka em `localhost:9092`, os arquivos `yelp_academic_dataset_business.json` e `yelp_academic_dataset_review.json` obtidos no [Yelp Open Dataset](https://www.yelp.com/dataset), e espaço local para SQLite e artefatos. Os arquivos brutos não serão versionados. O MLflow deve ser acessível ao consumidor e ao processo de treino; a configuração padrão planejada é local, em `http://127.0.0.1:5000`.
-
-Os seguintes comandos definem a interface que será implementada. Os nomes e argumentos estão especificados aqui para orientar o código, mas **ainda falharão** enquanto ele não existir:
+Na raiz do repositório, com Docker Compose v2.20 ou superior:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r recommender_training/requirements.txt
-
-mlflow server --backend-store-uri sqlite:///recommender_training/data/mlflow.db --default-artifact-root ./recommender_training/data/mlartifacts --host 127.0.0.1 --port 5000
+docker compose up --build -d
+docker compose logs -f yelp-sample yelp-seed-replay recommender-worker
+docker compose exec recommender-worker taste-match-training status
 ```
 
-Em outro terminal, com o broker e o MLflow ativos:
+A primeira execução lê `data/yelp/yelp_academic_dataset_business.json` e `data/yelp/yelp_academic_dataset_review.json` em streaming; os arquivos não entram na imagem. O preparador escolhe 300 restaurantes abertos de Filadélfia e sorteia 100 usuários com semente 42 entre os que têm ao menos 10 restaurantes distintos e 5 reviews positivos. Uma avaliação positiva por usuário fica para validação e outra para teste. O restante é dividido em carga inicial e reprodução posterior.
+
+Depois de os consumidores persistirem a carga inicial, o monitor publica `recommender-retrain`. O treinador lê um retrato dos três bancos, treina os NeuMF e registra métricas com 10 negativos uniformes por positivo (`config/recbole.yaml`). O primeiro pacote válido é promovido; depois, apenas uma melhora em NDCG@10 substitui o campeão. Cada promoção publica `recommender-ready`. O replay posterior começa após a primeira promoção e alimenta novos treinos a cada 300 eventos únicos aceitos.
+
+O MLflow fica em [http://localhost:5000](http://localhost:5000). Para consultar o modelo:
 
 ```bash
-export KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-export MLFLOW_TRACKING_URI=http://127.0.0.1:5000
-python3 -m recommender_training.cli prepare-yelp --business-json /caminho/yelp_academic_dataset_business.json --review-json /caminho/yelp_academic_dataset_review.json
-python3 -m recommender_training.cli consume
+docker compose exec recommender-worker taste-match-training sample-user
+docker compose exec recommender-worker taste-match-training recommend --user-id ID_DO_USUARIO --limit 10
+docker compose exec recommender-worker taste-match-training request-train
 ```
 
-Em um terceiro terminal, usando o mesmo ambiente:
+O primeiro comando imprime um ID real da amostra; use-o no segundo. `request-train --force` executa mesmo sem dados novos. `docker compose down` preserva os volumes de modelos e Kafka. O Compose da raiz guarda matrizes Yelp em `kafka/data/yelp`, separadas das matrizes sintéticas em `kafka/data`.
+
+## Desenvolvimento com uv
+
+O projeto usa `pyproject.toml`, `uv.lock` e `.python-version`; não há `requirements.txt`. Com uv instalado no host:
 
 ```bash
-python3 -m recommender_training.cli replay --split seed
-python3 -m recommender_training.cli train --force
-python3 -m recommender_training.cli replay --split live
+cd recommender_training
+uv sync --locked
+uv run taste-match-training prepare-yelp
+uv run taste-match-training --help
 ```
 
-`prepare-yelp` criará a validação separada e os eventos de demonstração; `replay --split seed` alimentará o histórico inicial; `train --force` fará a primeira publicação; `replay --split live` demonstrará o retreino automático. O valor `RETRAIN_MIN_EVENTS=100` poderá ser reduzido para a apresentação. A confirmação do resultado será um novo run no MLflow e uma mensagem em `recommender.model.ready.v1` **somente se** o candidato superar a versão em uso.
+O código está em `src/data/`, `src/models/`, `src/messaging/` e `src/orchestration/`. Dados Yelp brutos, ambiente virtual e estado gerado ficam fora do Git. Os comandos `status` e `recommend` do Compose devem ser executados dentro do container, que tem acesso ao volume compartilhado do MLflow. Para publicar eventos pela CLI no host, configure `KAFKA_BOOTSTRAP_SERVERS=localhost:29192,localhost:39192,localhost:49192`.
 
-Os outros módulos do trabalho deverão consumir os eventos primitivos para detectar três situações de interesse. Eles também poderão consumir `recommender.model.ready.v1` para carregar o ensemble promovido; a interface está em [`02_eventos_e_dados.md`](planning/02_eventos_e_dados.md).
+## Documentação
+
+- [Fluxo e requisitos](planning/01_requisitos_e_fluxo.md)
+- [Eventos e dados](planning/02_eventos_e_dados.md)
+- [Preparação e modelos](planning/03_preparacao_e_modelos.md)
+- [Retreino e publicação](planning/04_retreino_e_publicacao.md)
+- [Implementação e validação](planning/05_implementacao_e_validacao.md)

@@ -1,0 +1,14 @@
+README.md
+pyproject.toml
+src/data/__init__.py
+src/data/snapshot.py
+src/data/yelp_sample.py
+src/messaging/__init__.py
+src/models/__init__.py
+src/orchestration/__init__.py
+src/taste_match_training.egg-info/PKG-INFO
+src/taste_match_training.egg-info/SOURCES.txt
+src/taste_match_training.egg-info/dependency_links.txt
+src/taste_match_training.egg-info/entry_points.txt
+src/taste_match_training.egg-info/requires.txt
+src/taste_match_training.egg-info/top_level.txt

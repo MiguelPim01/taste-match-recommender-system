@@ -1,0 +1,6 @@
+.venv
+data/
+runtime/
+**/__pycache__/
+*.pyc
+planning/

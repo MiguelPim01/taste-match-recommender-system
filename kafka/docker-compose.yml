@@ -63,33 +63,33 @@ services:
   kafka-1:
     <<: *kafka-service
     ports:
-      - "29092:9092"
+      - "${KAFKA_HOST_PORT_1:-29092}:9092"
     environment:
       <<: *kafka-environment
       KAFKA_NODE_ID: 1
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:19092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-1:19092,PLAINTEXT_HOST://localhost:${KAFKA_HOST_PORT_1:-29092}
     volumes:
       - kafka-1-data:/var/lib/kafka/data
 
   kafka-2:
     <<: *kafka-service
     ports:
-      - "39092:9092"
+      - "${KAFKA_HOST_PORT_2:-39092}:9092"
     environment:
       <<: *kafka-environment
       KAFKA_NODE_ID: 2
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:19092,PLAINTEXT_HOST://localhost:39092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:19092,PLAINTEXT_HOST://localhost:${KAFKA_HOST_PORT_2:-39092}
     volumes:
       - kafka-2-data:/var/lib/kafka/data
 
   kafka-3:
     <<: *kafka-service
     ports:
-      - "49092:9092"
+      - "${KAFKA_HOST_PORT_3:-49092}:9092"
     environment:
       <<: *kafka-environment
       KAFKA_NODE_ID: 3
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:19092,PLAINTEXT_HOST://localhost:49092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-3:19092,PLAINTEXT_HOST://localhost:${KAFKA_HOST_PORT_3:-49092}
     volumes:
       - kafka-3-data:/var/lib/kafka/data
 
@@ -124,18 +124,21 @@ services:
 
   view-producer:
     <<: *java-service
+    profiles: [synthetic]
     command: ["java", "-jar", "/app/view-producer.jar"]
     environment:
       <<: *producer-environment
 
   comment-producer:
     <<: *java-service
+    profiles: [synthetic]
     command: ["java", "-jar", "/app/comment-producer.jar"]
     environment:
       <<: *producer-environment
 
   review-producer:
     <<: *java-service
+    profiles: [synthetic]
     command: ["java", "-jar", "/app/review-producer.jar"]
     environment:
       <<: *producer-environment
@@ -147,7 +150,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
       DATABASE_PATH: /data/views.db
     volumes:
-      - ./data:/data
+      - ${MATRIX_DATA_DIR:-./data}:/data
 
   comment-matrix-consumer:
     <<: *java-service
@@ -156,7 +159,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
       DATABASE_PATH: /data/comments.db
     volumes:
-      - ./data:/data
+      - ${MATRIX_DATA_DIR:-./data}:/data
 
   review-matrix-consumer:
     <<: *java-service
@@ -165,7 +168,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
       DATABASE_PATH: /data/reviews.db
     volumes:
-      - ./data:/data
+      - ${MATRIX_DATA_DIR:-./data}:/data
 
 networks:
   kafka-network:

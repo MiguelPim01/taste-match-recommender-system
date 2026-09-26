@@ -1,24 +1,7 @@
-# 07 — Integração futura
+# 07 — Integração com treinamento
 
-## Entrada dos modelos
+O Compose da raiz reutiliza os três tópicos e consumidores Kafka, mas publica uma amostra Yelp com IDs reais em vez dos eventos sintéticos. A variável `MATRIX_DATA_DIR` isola seus SQLite em `kafka/data/yelp`; o Compose deste diretório continua usando `kafka/data` por padrão.
 
-Os bancos SQLite separam os três sinais da arquitetura:
+O treinador Python lê as matrizes em modo de leitura, copia um retrato estável de cada banco e transforma `view_count`, `comment_text` e `stars` em três datasets RecBole. Após a carga inicial, um monitor publica pedidos em `recommender-retrain`. Quando um conjunto dos três modelos supera o campeão, o treinador anuncia `recommender-ready`. Os dois tópicos adicionais são criados pelo Compose da raiz.
 
-- Modelo A lê `view_matrix.view_count`.
-- Modelo B lê `comment_matrix.comment_text` e calcula sentimento na preparação do treinamento.
-- Modelo C lê `review_matrix.stars`.
-
-O treinamento deverá abrir os três bancos em modo de leitura, capturar um retrato consistente e manter os mesmos `user_id` e `restaurant_id`. Comentários continuam em inglês porque os dados reais planejados vêm do Yelp; a análise VADER prevista em `recommender_training` permanece adequada.
-
-## Diferença para o planejamento anterior
-
-O planejamento em `recommender_training` menciona o tópico agregado `restaurant.interactions.v1`. A implementação Kafka atual adotou os três tópicos definidos pelo diagrama. Quando o treinamento for implementado, ele deverá escolher uma destas integrações:
-
-1. Ler diretamente os três bancos desta etapa, opção mais simples para treinamento em lote.
-2. Consumir os três tópicos com um único processo e reconstruir seu armazenamento próprio, opção adequada para retreinamento contínuo.
-
-Não é necessário criar o tópico agregado. Os campos comuns e as regras de identificação já são compatíveis com o contrato planejado; muda apenas a separação física por tipo de interação.
-
-## Saída futura
-
-Depois do treinamento dos três modelos, o ensemble será promovido e publicará `recommender.model.ready.v1`, conforme a documentação em `recommender_training`. Esse tópico e seu consumidor não fazem parte do Compose atual.
+O contrato e os comandos atuais estão em [`recommender_training`](../../recommender_training/README.md). O arquivo SQLite de cada tipo conserva `processed_events`, de modo que replays com `event_id` estável não duplicam os sinais.

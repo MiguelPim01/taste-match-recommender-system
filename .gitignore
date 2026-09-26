@@ -2,3 +2,11 @@ kafka/data/*.db
 kafka/data/*.db-shm
 kafka/data/*.db-wal
 kafka/**/target/
+
+recommender_training/data/
+recommender_training/.venv/
+recommender_training/.pytest_cache/
+recommender_training/**/__pycache__/
+recommender_training/runtime/
+recommender_training/log_tensorboard/
+kafka/data/*/

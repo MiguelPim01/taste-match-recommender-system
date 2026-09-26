@@ -1,0 +1,111 @@
+include:
+  - ./kafka/docker-compose.yml
+
+x-training-service: &training-service
+  image: taste-match-training:local
+  networks:
+    - kafka-network
+  
+  environment: &training-environment
+    KAFKA_BOOTSTRAP_SERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+    MATRIX_DIR: /matrices
+    YELP_DIR: /yelp
+    TRAINING_RUNTIME_DIR: /runtime
+  
+  volumes: &training-volumes
+    - ./recommender_training/data/yelp:/yelp:ro
+    - ./kafka/data/yelp:/matrices:ro
+    - training-runtime:/runtime
+    - mlflow-data:/mlflow
+
+services:
+  mlflow:
+    <<: *training-service
+    build:
+      context: ./recommender_training
+      dockerfile: Dockerfile
+    
+    command: ["mlflow", "server", "--backend-store-uri", "sqlite:////mlflow/mlflow.db", "--default-artifact-root", "/mlflow/artifacts", "--host", "0.0.0.0", "--port", "5000"]
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+  recommender-topic-init:
+    image: apache/kafka:4.3.1
+    networks:
+      - kafka-network
+    depends_on:
+      topic-init:
+        condition: service_completed_successfully
+    command:
+      - /bin/bash
+      - -ec
+      - |
+        for topic in recommender-retrain recommender-ready; do
+          /opt/kafka/bin/kafka-topics.sh \
+            --bootstrap-server kafka-1:19092,kafka-2:19092,kafka-3:19092 \
+            --create --if-not-exists --topic "$${topic}" \
+            --partitions 3 --replication-factor 3 \
+            --config min.insync.replicas=2
+        done
+    restart: "no"
+
+  yelp-sample:
+    <<: *training-service
+    command: ["taste-match-training", "prepare-yelp"]
+    restart: "no"
+
+  yelp-seed-replay:
+    <<: *training-service
+    command: ["taste-match-training", "replay", "seed"]
+    depends_on:
+      yelp-sample:
+        condition: service_completed_successfully
+      recommender-topic-init:
+        condition: service_completed_successfully
+      view-matrix-consumer:
+        condition: service_started
+      comment-matrix-consumer:
+        condition: service_started
+      review-matrix-consumer:
+        condition: service_started
+    restart: "no"
+
+  recommender-monitor:
+    <<: *training-service
+    command: ["taste-match-training", "monitor"]
+    depends_on:
+      yelp-seed-replay:
+        condition: service_completed_successfully
+    environment:
+      <<: *training-environment
+      RETRAIN_MIN_EVENTS: ${RETRAIN_MIN_EVENTS:-300}
+    restart: unless-stopped
+
+  recommender-worker:
+    <<: *training-service
+    command: ["taste-match-training", "worker"]
+    depends_on:
+      recommender-topic-init:
+        condition: service_completed_successfully
+      mlflow:
+        condition: service_started
+    restart: unless-stopped
+
+  yelp-live-replay:
+    <<: *training-service
+    command: ["taste-match-training", "replay", "live"]
+    depends_on:
+      yelp-seed-replay:
+        condition: service_completed_successfully
+      recommender-worker:
+        condition: service_started
+    environment:
+      <<: *training-environment
+      LIVE_REPLAY_INTERVAL_MS: ${LIVE_REPLAY_INTERVAL_MS:-200}
+    restart: "no"
+
+volumes:
+  training-runtime:
+  mlflow-data:

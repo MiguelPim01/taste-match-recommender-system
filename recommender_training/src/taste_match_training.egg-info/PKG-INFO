@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: taste-match-training
+Version: 0.1.0
+Requires-Python: <3.11,>=3.10
+Requires-Dist: confluent-kafka==2.6.1
+Requires-Dist: mlflow==2.22.2
+Requires-Dist: numpy==1.26.4
+Requires-Dist: pyyaml==6.0.2
+Requires-Dist: recbole==1.2.1
+Requires-Dist: scipy<1.14
+Requires-Dist: torch==2.2.2
+Requires-Dist: vaderSentiment==3.3.2

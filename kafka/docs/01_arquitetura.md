@@ -35,6 +35,6 @@ Aplicações dentro da rede Compose acessam `kafka-1:19092,kafka-2:19092,kafka-3
 
 Os dados dos brokers ficam em volumes Docker. As matrizes usam bind mount em `kafka/data`, permitindo consulta direta e preservação após `docker compose down`.
 
-## Limite desta etapa
+## Integração com treinamento
 
-Esta implementação termina nas matrizes de interação. Os modelos A, B e C e o ensemble representados em `kafka_architecture.png` serão desenvolvidos em outra etapa. A divisão mantém a primeira versão pequena, executável e verificável sem dataset ou infraestrutura de aprendizado de máquina.
+O Compose da raiz usa os mesmos consumidores e tópicos para preencher bancos isolados em `kafka/data/yelp`. O treinamento lê essas matrizes, treina três modelos e publica um aviso de promoção. Os produtores sintéticos deste diretório continuam disponíveis no perfil `synthetic`.

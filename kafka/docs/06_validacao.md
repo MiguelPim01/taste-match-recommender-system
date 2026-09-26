@@ -3,7 +3,7 @@
 ## Cluster e tópicos
 
 ```bash
-docker compose up --build -d
+docker compose --profile synthetic up --build -d
 docker compose ps
 docker compose exec kafka-1 /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server kafka-1:19092 --describe
@@ -27,7 +27,7 @@ Os produtores devem registrar `Evento publicado`; os consumidores, `outcome=ACCE
 ```bash
 docker compose restart view-matrix-consumer
 docker compose down
-docker compose up -d
+docker compose --profile synthetic up -d
 ```
 
 As contagens e eventos anteriores devem continuar nos bancos. Mensagens reentregues aparecem como `outcome=DUPLICATE` e não incrementam novamente a matriz.

@@ -1,0 +1,8 @@
+confluent-kafka==2.6.1
+mlflow==2.22.2
+numpy==1.26.4
+pyyaml==6.0.2
+recbole==1.2.1
+scipy<1.14
+torch==2.2.2
+vaderSentiment==3.3.2

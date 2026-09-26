@@ -10,11 +10,11 @@ A partir da raiz do repositório:
 
 ```bash
 cd kafka
-docker compose up --build -d
+docker compose --profile synthetic up --build -d
 docker compose ps
 ```
 
-O primeiro build baixa as imagens e dependências Maven. O serviço `topic-init` termina após criar os tópicos; o estado `Exited (0)` desse serviço é esperado.
+O primeiro build baixa as imagens e dependências Maven. O perfil `synthetic` liga os três produtores. O serviço `topic-init` termina após criar os tópicos; o estado `Exited (0)` desse serviço é esperado. O Compose da raiz usa esta infraestrutura com eventos Yelp, sem ativar os produtores sintéticos.
 
 Para acompanhar eventos:
 
@@ -30,7 +30,7 @@ As variáveis podem ser informadas na execução:
 
 ```bash
 PRODUCER_INTERVAL_MS=2500 DEMO_USER_COUNT=10 DEMO_RESTAURANT_COUNT=20 \
-  docker compose up --build -d
+  docker compose --profile synthetic up --build -d
 ```
 
 Os padrões são intervalo de 1 segundo, cinco usuários e oito restaurantes.
@@ -51,4 +51,4 @@ docker compose exec kafka-1 /opt/kafka/bin/kafka-topics.sh \
   --bootstrap-server kafka-1:19092 --describe
 ```
 
-Se uma porta do host já estiver ocupada, libere `29092`, `39092` ou `49092` antes de subir o ambiente.
+As portas padrão do host são `29092`, `39092` e `49092`; podem ser alteradas com `KAFKA_HOST_PORT_1`, `KAFKA_HOST_PORT_2` e `KAFKA_HOST_PORT_3`. O Compose da raiz usa `29192`, `39192` e `49192` para não interferir nesta demonstração.
