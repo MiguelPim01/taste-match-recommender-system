@@ -10,3 +10,5 @@ recommender_training/**/__pycache__/
 recommender_training/runtime/
 recommender_training/log_tensorboard/
 kafka/data/*/
+
+.env
