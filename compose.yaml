@@ -1,5 +1,8 @@
 include:
-  - ./kafka/docker-compose.yml
+  # compose.env é versionado para o comando funcionar num clone limpo, sem .env:
+  # consumidores e treino precisam usar o mesmo kafka/data/yelp.
+  - path: ./kafka/docker-compose.yml
+    env_file: ./compose.env
 
 x-training-service: &training-service
   image: taste-match-training:local
