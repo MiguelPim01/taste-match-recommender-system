@@ -13,7 +13,7 @@ docker compose ps
 docker compose logs -f view-producer view-matrix-consumer
 ```
 
-O perfil `synthetic` liga os três produtores. Depois de alguns segundos, os arquivos `data/views.db`, `data/comments.db` e `data/reviews.db` serão criados. Para encerrar preservando os dados:
+O perfil `synthetic` liga os três produtores. Para inspecionar tópicos, mensagens e o lag dos consumidores, abra o Kafka UI em [http://localhost:8085](http://localhost:8085) (porta configurável por `KAFKA_UI_PORT`). Depois de alguns segundos, os arquivos `data/views.db`, `data/comments.db` e `data/reviews.db` serão criados. Para encerrar preservando os dados:
 
 ```bash
 docker compose down
