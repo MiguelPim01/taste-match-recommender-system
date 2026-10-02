@@ -36,7 +36,7 @@ def create_snapshot(database_dir: Path, output_dir: Path, manifest_path: Path) -
                 source.backup(destination)
         copied[signal] = destination_path
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    users = set(manifest["users"])
+    manifest_users = set(manifest["users"])
     restaurants = set(manifest["restaurants"])
     held_out = {(row["user_id"], row["restaurant_id"]) for split in ("valid", "test")
                 for row in manifest[split]}
@@ -51,7 +51,7 @@ def create_snapshot(database_dir: Path, output_dir: Path, manifest_path: Path) -
         with sqlite3.connect(path) as connection:
             snapshot_counts[signal] = connection.execute("SELECT COUNT(*) FROM processed_events").fetchone()[0]
             matrices[signal] = {(uid, item): value for uid, item, value in connection.execute(queries[signal])
-                                if uid in users and item in restaurants and (uid, item) not in held_out}
+                                if item in restaurants and (uid, item) not in held_out}
 
     analyzer = SentimentIntensityAnalyzer()
     positives = {
@@ -65,6 +65,7 @@ def create_snapshot(database_dir: Path, output_dir: Path, manifest_path: Path) -
     popularity = Counter(item for _, item in positives["ratings"])
     valid = [(row["user_id"], row["restaurant_id"]) for row in manifest["valid"]]
     test = [(row["user_id"], row["restaurant_id"]) for row in manifest["test"]]
+    users = manifest_users.union(*({uid for uid, _ in pairs} for pairs in positives.values()))
 
     for signal, pairs in positives.items():
         folder = output_dir / signal
@@ -72,7 +73,11 @@ def create_snapshot(database_dir: Path, output_dir: Path, manifest_path: Path) -
         _atomic(folder / f"{signal}.train.inter", sorted(pairs))
         _atomic(folder / f"{signal}.valid.inter", valid)
         _atomic(folder / f"{signal}.test.inter", test)
-        (folder / f"{signal}.user").write_text("user_id:token\n" + "\n".join(sorted(users)) + "\n", encoding="utf-8")
+        # Profiles created in the app enter only the sources where they have positives: an untrained
+        # embedding would be noise, and the ensemble skips sources that do not know the user.
+        signal_users = manifest_users | {uid for uid, _ in pairs}
+        (folder / f"{signal}.user").write_text("user_id:token\n" + "\n".join(sorted(signal_users)) + "\n",
+                                               encoding="utf-8")
         (folder / f"{signal}.item").write_text("item_id:token\n" + "\n".join(sorted(restaurants)) + "\n", encoding="utf-8")
 
     metadata = {

@@ -28,4 +28,12 @@ Promoção: `recommender-ready`, chave `ensemble`:
 {"schema_version":1,"event_id":"model_ready:<run_id>","type":"model.ready","run_id":"<run_id>","bundle_uri":"runs:/<run_id>/bundle","metric_name":"NDCG@10","metric_value":0.42,"trained_until_counts":{"views":100,"comments":100,"reviews":100},"created_at":"2026-09-26T12:05:00Z"}
 ```
 
-O pacote só é anunciado após os três modelos e o manifesto terem sido salvos. O futuro consumidor deve deduplicar por `run_id` e acessar o mesmo armazenamento de artefatos MLflow.
+O pacote só é anunciado após os três modelos e o manifesto terem sido salvos. O consumidor deve deduplicar por `run_id` e acessar o mesmo armazenamento de artefatos MLflow.
+
+Listas: `user-recommendations`, chave `user_id`, compactado. O `recommendation-publisher` consome `recommender-ready` com o grupo `recommendation-publisher-v1` e publica uma mensagem por perfil conhecido pelo pacote:
+
+```json
+{"schema_version":1,"event_id":"recs:<run_id>:<user_id>","type":"recommendations.generated","user_id":"<user_id>","run_id":"<run_id>","generated_at":"2026-09-26T12:06:00Z","items":["<restaurant_id>","..."]}
+```
+
+`items` vem na ordem do ranking do ensemble, sem restaurantes já observados nem avaliados com 1–2 estrelas no retrato. A compactação guarda só a lista mais recente de cada perfil.

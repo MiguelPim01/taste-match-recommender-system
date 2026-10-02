@@ -17,7 +17,8 @@ from confluent_kafka import Consumer
 
 from data.snapshot import counts, create_snapshot
 from data.yelp_sample import prepare
-from messaging.kafka import REQUEST_TOPIC, READY_TOPIC, bootstrap_servers, producer, publish, replay
+from messaging.kafka import (RECOMMENDATIONS_TOPIC, REQUEST_TOPIC, READY_TOPIC, bootstrap_servers, producer, publish,
+                             publish_all, replay)
 from models.ranking import Ensemble, sampled_ndcg
 from models.recbole_models import train_models
 from orchestration.state import State
@@ -29,6 +30,7 @@ RUNTIME = Path(os.getenv("TRAINING_RUNTIME_DIR", ROOT / "runtime"))
 MATRICES = Path(os.getenv("MATRIX_DIR", ROOT.parent / "kafka" / "data" / "yelp"))
 YELP = Path(os.getenv("YELP_DIR", ROOT / "data" / "yelp"))
 CONFIG = ROOT / "config" / "recbole.yaml"
+RECOMMENDATION_LIMIT = int(os.getenv("RECOMMENDATION_LIMIT", "50"))
 RETRAIN_MIN_EVENTS = int(os.getenv("RETRAIN_MIN_EVENTS", "300"))
 
 
@@ -143,6 +145,47 @@ def worker() -> None:
             state.close()
 
 
+def publish_recommendations(ready: dict) -> int:
+    """Rank every profile the promoted bundle knows; the compacted topic keeps the latest list per profile."""
+    _tracking()
+    run_id = ready["run_id"]
+    ensemble = Ensemble(_bundle(run_id))
+    generated_at = _now()
+    messages = [(user_id, {"schema_version": 1, "event_id": f"recs:{run_id}:{user_id}",
+                           "type": "recommendations.generated", "user_id": user_id, "run_id": run_id,
+                           "generated_at": generated_at, "items": ensemble.recommend(user_id, RECOMMENDATION_LIMIT)})
+                for user_id in ensemble.metadata["users"]]
+    publish_all(producer(), RECOMMENDATIONS_TOPIC, messages)
+    return len(messages)
+
+
+def recommendation_publisher() -> None:
+    while True:
+        client = Consumer({"bootstrap.servers": bootstrap_servers(), "group.id": "recommendation-publisher-v1",
+                           "enable.auto.commit": False, "auto.offset.reset": "earliest",
+                           "max.poll.interval.ms": 1800000})
+        try:
+            client.subscribe([READY_TOPIC])
+            while True:
+                message = client.poll(2)
+                if message is None:
+                    continue
+                if message.error():
+                    raise RuntimeError(str(message.error()))
+                event = json.loads(message.value())
+                if event.get("type") != "model.ready" or event.get("schema_version") != 1:
+                    LOG.warning("Aviso de modelo inválido descartado: %s", event)
+                else:
+                    LOG.info("Listas publicadas para %d perfis com o modelo %s",
+                             publish_recommendations(event), event["run_id"])
+                client.commit(message=message, asynchronous=False)
+        except Exception:
+            LOG.exception("Falha no publicador; repetindo o aviso após reconexão")
+            time.sleep(10)
+        finally:
+            client.close()
+
+
 def monitor() -> None:
     while True:
         try:
@@ -206,6 +249,7 @@ def main() -> None:
     replay_command.add_argument("split", choices=("seed", "live"))
     subcommands.add_parser("monitor")
     subcommands.add_parser("worker")
+    subcommands.add_parser("publish-recommendations")
     subcommands.add_parser("status")
     subcommands.add_parser("sample-user")
     request_command = subcommands.add_parser("request-train")
@@ -233,6 +277,8 @@ def main() -> None:
         monitor()
     elif args.command == "worker":
         worker()
+    elif args.command == "publish-recommendations":
+        recommendation_publisher()
     elif args.command == "train":
         state = _state()
         try:

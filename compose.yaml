@@ -54,6 +54,12 @@ services:
             --partitions 3 --replication-factor 3 \
             --config min.insync.replicas=2
         done
+        # Compactado: guarda só a lista mais recente de cada perfil (chave user_id).
+        /opt/kafka/bin/kafka-topics.sh \
+          --bootstrap-server kafka-1:19092,kafka-2:19092,kafka-3:19092 \
+          --create --if-not-exists --topic user-recommendations \
+          --partitions 3 --replication-factor 3 \
+          --config min.insync.replicas=2 --config cleanup.policy=compact
     restart: "no"
 
   yelp-sample:
@@ -88,6 +94,16 @@ services:
   recommender-worker:
     <<: *training-service
     command: ["taste-match-training", "worker"]
+    depends_on:
+      recommender-topic-init:
+        condition: service_completed_successfully
+      mlflow:
+        condition: service_started
+    restart: unless-stopped
+
+  recommendation-publisher:
+    <<: *training-service
+    command: ["taste-match-training", "publish-recommendations"]
     depends_on:
       recommender-topic-init:
         condition: service_completed_successfully

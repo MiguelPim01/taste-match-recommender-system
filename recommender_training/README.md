@@ -16,6 +16,8 @@ A primeira execução lê `data/yelp/yelp_academic_dataset_business.json` e `dat
 
 Depois de os consumidores persistirem a carga inicial, o monitor publica `recommender-retrain`. O treinador lê um retrato dos três bancos, treina os NeuMF e registra métricas com 10 negativos uniformes por positivo (`config/recbole.yaml`). Cada treino concluído passa a ser o modelo em uso e publica `recommender-ready`; o NDCG@10 fica registrado para acompanhar a evolução, sem decidir a troca. O replay posterior começa após o primeiro modelo e alimenta novos treinos a cada 300 eventos únicos aceitos (`RETRAIN_MIN_EVENTS`), limite que o monitor e o worker conferem.
 
+O retrato inclui os 100 usuários do manifesto e os perfis criados no app que têm interações positivas; cada fonte conhece só os perfis com positivos nela, e o ensemble ignora as fontes que não conhecem o usuário. A cada `recommender-ready`, o `recommendation-publisher` carrega o pacote do modelo novo, ranqueia todos os perfis que ele conhece e publica uma lista de 50 restaurantes por perfil em `user-recommendations` (`RECOMMENDATION_LIMIT`), tópico compactado com chave `user_id` que o backend consome.
+
 O MLflow fica em [http://localhost:5000](http://localhost:5000). Para consultar o modelo:
 
 ```bash

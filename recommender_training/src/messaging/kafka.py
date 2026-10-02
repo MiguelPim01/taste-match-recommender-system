@@ -17,6 +17,7 @@ TOPICS = {
 }
 REQUEST_TOPIC = "recommender-retrain"
 READY_TOPIC = "recommender-ready"
+RECOMMENDATIONS_TOPIC = "user-recommendations"
 
 
 def bootstrap_servers() -> str:
@@ -37,6 +38,22 @@ def publish(client: Producer, topic: str, key: str, payload: dict) -> None:
                    on_delivery=delivered)
     if client.flush(30) != 0 or not result or result[0] is not None:
         raise RuntimeError(f"Falha ao publicar em {topic}: {result}")
+
+
+def publish_all(client: Producer, topic: str, messages: list[tuple[str, dict]]) -> None:
+    """Queue every message and flush once; any failed delivery fails the whole batch."""
+    errors = []
+
+    def delivered(error, _message):
+        if error is not None:
+            errors.append(error)
+
+    for key, payload in messages:
+        client.produce(topic, key=key.encode(), value=json.dumps(payload, ensure_ascii=False).encode(),
+                       on_delivery=delivered)
+        client.poll(0)
+    if client.flush(60) != 0 or errors:
+        raise RuntimeError(f"Falha ao publicar em {topic}: {errors[:3]}")
 
 
 def replay(path: Path, interval_ms: int = 0) -> dict[str, int]:
