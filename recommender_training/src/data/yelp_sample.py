@@ -13,6 +13,7 @@ from pathlib import Path
 
 BUSINESS_FILE = "yelp_academic_dataset_business.json"
 REVIEW_FILE = "yelp_academic_dataset_review.json"
+CATALOG_FILE = "catalog.json"
 SEED = 42
 SAMPLE_VERSION = 2
 RESTAURANT_COUNT = 300
@@ -39,6 +40,8 @@ def prepare(yelp_dir: Path, output_dir: Path) -> dict:
     if manifest_path.exists() and all((output_dir / f).exists() for f in ("seed.jsonl", "live.jsonl")):
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("source_signature") == signature and manifest.get("sample_version") == SAMPLE_VERSION:
+            if not (output_dir / CATALOG_FILE).exists():
+                _write_catalog(yelp_dir, output_dir, set(manifest["restaurants"]))
             return manifest
 
     restaurants = []
@@ -154,8 +157,33 @@ def prepare(yelp_dir: Path, output_dir: Path) -> dict:
         "valid": [_pair(review) for review in held_out["valid"]],
         "test": [_pair(review) for review in held_out["test"]],
     }
+    _write_catalog(yelp_dir, output_dir, selected_restaurants)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return manifest
+
+
+def _write_catalog(yelp_dir: Path, output_dir: Path, restaurant_ids: set[str]) -> None:
+    """Keep the display fields of the sampled restaurants for the backend; the manifest only has their IDs."""
+    catalog = []
+    for business in _rows(yelp_dir / BUSINESS_FILE):
+        if business["business_id"] in restaurant_ids:
+            catalog.append({
+                "id": business["business_id"],
+                "name": business["name"],
+                "address": business.get("address") or None,
+                "city": business.get("city"),
+                "state": business.get("state"),
+                "postal_code": business.get("postal_code") or None,
+                "latitude": business.get("latitude"),
+                "longitude": business.get("longitude"),
+                "stars": business.get("stars"),
+                "review_count": business.get("review_count", 0),
+                "categories": [part.strip() for part in (business.get("categories") or "").split(",") if part.strip()],
+            })
+    if len(catalog) != len(restaurant_ids):
+        raise ValueError(f"Catálogo incompleto: {len(catalog)} de {len(restaurant_ids)} restaurantes")
+    catalog.sort(key=lambda row: row["id"])
+    (output_dir / CATALOG_FILE).write_text(json.dumps(catalog, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _pair(review: dict) -> dict:
