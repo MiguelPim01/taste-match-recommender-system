@@ -15,7 +15,9 @@ x-training-service: &training-service
     MATRIX_DIR: /matrices
     YELP_DIR: /yelp
     TRAINING_RUNTIME_DIR: /runtime
-  
+    # Monitor e worker usam o mesmo limite: a cada N eventos novos sai um modelo novo.
+    RETRAIN_MIN_EVENTS: ${RETRAIN_MIN_EVENTS:-300}
+
   volumes: &training-volumes
     - ./recommender_training/data/yelp:/yelp:ro
     - ./kafka/data/yelp:/matrices:ro
@@ -81,9 +83,6 @@ services:
     depends_on:
       yelp-seed-replay:
         condition: service_completed_successfully
-    environment:
-      <<: *training-environment
-      RETRAIN_MIN_EVENTS: ${RETRAIN_MIN_EVENTS:-300}
     restart: unless-stopped
 
   recommender-worker:

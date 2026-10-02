@@ -14,7 +14,7 @@ docker compose exec recommender-worker taste-match-training status
 
 A primeira execução lê `data/yelp/yelp_academic_dataset_business.json` e `data/yelp/yelp_academic_dataset_review.json` em streaming; os arquivos não entram na imagem. O preparador escolhe 300 restaurantes abertos de Filadélfia e sorteia 100 usuários com semente 42 entre os que têm ao menos 10 restaurantes distintos e 5 reviews positivos. Uma avaliação positiva por usuário fica para validação e outra para teste. O restante é dividido em carga inicial e reprodução posterior.
 
-Depois de os consumidores persistirem a carga inicial, o monitor publica `recommender-retrain`. O treinador lê um retrato dos três bancos, treina os NeuMF e registra métricas com 10 negativos uniformes por positivo (`config/recbole.yaml`). O primeiro pacote válido é promovido; depois, apenas uma melhora em NDCG@10 substitui o campeão. Cada promoção publica `recommender-ready`. O replay posterior começa após a primeira promoção e alimenta novos treinos a cada 300 eventos únicos aceitos.
+Depois de os consumidores persistirem a carga inicial, o monitor publica `recommender-retrain`. O treinador lê um retrato dos três bancos, treina os NeuMF e registra métricas com 10 negativos uniformes por positivo (`config/recbole.yaml`). Cada treino concluído passa a ser o modelo em uso e publica `recommender-ready`; o NDCG@10 fica registrado para acompanhar a evolução, sem decidir a troca. O replay posterior começa após o primeiro modelo e alimenta novos treinos a cada 300 eventos únicos aceitos (`RETRAIN_MIN_EVENTS`), limite que o monitor e o worker conferem.
 
 O MLflow fica em [http://localhost:5000](http://localhost:5000). Para consultar o modelo:
 
