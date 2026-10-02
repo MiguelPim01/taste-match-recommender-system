@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "event_id": "app:review:contract-0001",
+  "type": "restaurant.rated",
+  "user_id": "app-0123456789abcdef",
+  "restaurant_id": "r-contract",
+  "occurred_at": "2026-10-02T14:03:40.123Z",
+  "stars": 5
+}
