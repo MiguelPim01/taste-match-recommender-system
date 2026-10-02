@@ -124,6 +124,36 @@ services:
       LIVE_REPLAY_INTERVAL_MS: ${LIVE_REPLAY_INTERVAL_MS:-200}
     restart: "no"
 
+  backend:
+    build:
+      context: ./backend
+    image: taste-match-backend:local
+    networks:
+      - kafka-network
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka-1:19092,kafka-2:19092,kafka-3:19092
+      DATABASE_URL: sqlite:////data/backend.db
+      SAMPLE_DIR: /runtime/sample
+      RETRAIN_MIN_EVENTS: ${RETRAIN_MIN_EVENTS:-300}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - backend-data:/data
+      - training-runtime:/runtime:ro
+    depends_on:
+      recommender-topic-init:
+        condition: service_completed_successfully
+      yelp-sample:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
 volumes:
   training-runtime:
   mlflow-data:
+  backend-data:
